@@ -1,0 +1,5 @@
+# คัดลอกไฟล์นี้เป็น .dev.vars (ห้าม commit ไฟล์จริง)
+STRIPE_SECRET_KEY=sk_test_xxxxxxxxxxxx
+STRIPE_WEBHOOK_SECRET=whsec_xxxxxxxxxxxx
+ADMIN_PASSWORD=change-me-at-least-12-chars
+RESEND_API_KEY=re_xxxxxxxxxxxx          # ไม่ใส่ก็ได้ — ระบบจะข้ามการส่งอีเมล

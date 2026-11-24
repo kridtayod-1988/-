@@ -1,0 +1,32 @@
+name = "premapree-shop"
+compatibility_date = "2025-01-01"
+pages_build_output_dir = "public"
+
+[vars]
+PUBLIC_URL = "http://localhost:8788"          # เปลี่ยนเป็นโดเมนจริงหลัง deploy (ใช้สร้างลิงก์ในอีเมล)
+EMAIL_FROM = "ร้านเปรมปรี <onboarding@resend.dev>"  # ต้องเป็นโดเมนที่ยืนยันใน Resend ก่อนใช้จริง
+SHIPPING_FEE_THB = "40"                       # ค่าส่งแบบเหมา (บาท) เมื่อมีสินค้าที่ต้องจัดส่ง
+FREE_SHIPPING_FROM_THB = "800"                # ส่งฟรีเมื่อยอดสินค้าถึง (บาท)
+MIN_ORDER_THB = "10"                          # ยอดขั้นต่ำ (Stripe THB ขั้นต่ำ 10 บาท)
+CHECKOUT_TTL_SECONDS = "3600"                 # อายุหน้าชำระเงิน Stripe (30 นาที–24 ชม.)
+DOWNLOAD_EXPIRY_DAYS = "30"                   # อายุลิงก์ดาวน์โหลดสินค้าดิจิทัล
+DOWNLOAD_MAX_USES = "20"                      # จำนวนครั้งสูงสุดต่อลิงก์
+
+[[d1_databases]]
+binding = "DB"
+database_name = "shop-db"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "shop-media"                    # รูปสินค้า (สาธารณะผ่าน /media)
+
+[[r2_buckets]]
+binding = "VAULT"
+bucket_name = "shop-vault"                    # ตู้เซฟไฟล์ดิจิทัล
+
+# ความลับ (ตั้งด้วย `wrangler pages secret put ...` หรือใส่ใน .dev.vars):
+#   STRIPE_SECRET_KEY      = sk_test_... / sk_live_...
+#   STRIPE_WEBHOOK_SECRET  = whsec_...
+#   ADMIN_PASSWORD         = รหัสผ่านผู้ดูแล อย่างน้อย 12 ตัวอักษร
+#   RESEND_API_KEY         = re_... (ไม่ใส่ก็ได้ — ระบบจะข้ามการส่งอีเมล)
