@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>ผู้ดูแลระบบ — เปรมปรี ศรีนาราง</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body class="admin">
+  <div id="login-view" class="login-wrap">
+    <form id="login-form" class="login-card">
+      <div class="brand-mark big">ปป</div>
+      <h1>เข้าสู่ระบบผู้ดูแล</h1>
+      <label class="field"><span>รหัสผ่านผู้ดูแล</span><input type="password" name="password" required autocomplete="current-password" placeholder="อย่างน้อย 12 ตัวอักษร"></label>
+      <button class="btn primary block" type="submit">เข้าสู่ระบบ</button>
+      <p class="muted sm" id="login-msg"></p>
+    </form>
+  </div>
+
+  <div id="panel-view" class="hidden">
+    <header class="admin-bar">
+      <div class="container admin-bar-row">
+        <strong>ผู้ดูแลระบบ — เปรมปรี ศรีนาราง</strong>
+        <nav class="tabs">
+          <button class="tabbtn" data-tab="dash">ภาพรวม</button>
+          <button class="tabbtn" data-tab="products">สินค้า</button>
+          <button class="tabbtn" data-tab="coupons">คูปอง</button>
+          <button class="tabbtn" data-tab="orders">คำสั่งซื้อ</button>
+          <button class="tabbtn" data-tab="finance">การเงิน</button>
+          <button class="tabbtn" data-tab="settings">ตั้งค่า</button>
+        </nav>
+        <div class="admin-actions">
+          <a href="/" target="_blank" rel="noopener">ดูร้าน</a>
+          <button id="logout-btn" class="btn ghost sm">ออกจากระบบ</button>
+        </div>
+      </div>
+    </header>
+    <main id="admin-main" class="container"></main>
+  </div>
+
+  <!-- ฟอร์มสินค้า -->
+  <dialog id="product-dialog" class="product-dialog">
+    <form id="product-form">
+      <h2 id="pf-title">เพิ่มสินค้าใหม่</h2>
+      <div class="form-grid">
+        <label class="field span2"><span>ชื่อสินค้า *</span><input name="name" required maxlength="200"></label>
+        <label class="field"><span>สลัก URL (เว้นว่าง = สร้างให้อัตโนมัติ)</span><input name="slug" pattern="[a-z0-9-]*" placeholder="เช่น organic-cotton-tee"></label>
+        <label class="field"><span>หมวดหมู่</span><input name="category" maxlength="80" placeholder="เช่น เสื้อยืด"></label>
+        <label class="field"><span>ประเภท *</span>
+          <select name="type" id="f-type">
+            <option value="physical">สินค้าที่ต้องจัดส่ง</option>
+            <option value="digital">สินค้าดิจิทัล</option>
+          </select>
+        </label>
+        <label class="field"><span>ราคา (บาท) *</span><input name="price" type="number" min="1" step="1" required></label>
+        <label class="field"><span>ราคาก่อนลด (บาท)</span><input name="compare_at" type="number" min="1" step="1"></label>
+        <label class="field phys-only"><span>สต๊อก *</span><input name="stock" type="number" min="0" step="1"></label>
+        <label class="field dig-only span2"><span>ลิงก์เข้าถึง (ดิจิทัลประเภทเนื้อหา/คอร์ส)</span><input name="access_url" type="url" placeholder="https://"></label>
+        <label class="field span2"><span>รายละเอียด</span><textarea name="description" rows="4" maxlength="5000"></textarea></label>
+        <label class="field"><span>รูปสินค้า (JPG/PNG/WEBP ≤ 5MB)</span><input name="image" type="file" accept="image/jpeg,image/png,image/webp"></label>
+        <label class="field dig-only"><span>ไฟล์ดิจิทัล (≤ 25MB)</span><input name="file" type="file"></label>
+        <label class="check span2"><input type="checkbox" name="active" checked> เปิดขายสินค้านี้</label>
+        <p class="muted sm span2" id="pf-file-note"></p>
+        <div class="dialog-actions span2">
+          <button type="button" class="btn ghost" id="pf-cancel">ยกเลิก</button>
+          <button type="submit" class="btn primary" id="pf-save">บันทึกสินค้า</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ฟอร์มคูปอง -->
+  <dialog id="coupon-dialog" class="product-dialog">
+    <form id="coupon-form">
+      <h2 id="cf-title">เพิ่มคูปอง</h2>
+      <div class="form-grid">
+        <label class="field"><span>โค้ด *</span><input name="code" required pattern="[A-Za-z0-9_-]{2,32}" placeholder="เช่น PREM10"></label>
+        <label class="field"><span>ประเภท *</span>
+          <select name="kind" id="cf-kind">
+            <option value="percent">ร้อยละ (%)</option>
+            <option value="fixed">จำนวนเงิน (บาท)</option>
+          </select>
+        </label>
+        <label class="field"><span>ค่าส่วนลด *</span><input name="value" type="number" min="1" step="1" required></label>
+        <label class="field"><span>ยอดขั้นต่ำ (บาท)</span><input name="min_subtotal_thb" type="number" min="0" step="1" value="0"></label>
+        <label class="field cf-percent-only"><span>ส่วนลดสูงสุด (บาท)</span><input name="max_discount_thb" type="number" min="1" step="1"></label>
+        <label class="field"><span>จำกัดจำนวนครั้ง</span><input name="usage_limit" type="number" min="1" step="1"></label>
+        <label class="field"><span>เริ่มใช้วันที่</span><input name="starts_at" type="date"></label>
+        <label class="field"><span>หมดอายุวันที่</span><input name="ends_at" type="date"></label>
+        <label class="check span2"><input type="checkbox" name="active" checked> เปิดใช้งานคูปองนี้</label>
+        <div class="dialog-actions span2">
+          <button type="button" class="btn ghost" id="cf-cancel">ยกเลิก</button>
+          <button type="submit" class="btn primary" id="cf-save">บันทึกคูปอง</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- พื้นที่พิมพ์ (ใบปะหน้าพัสดุ / ใบสรุปการเงิน) -->
+  <div id="print-area" class="print-only"></div>
+
+  <script type="module" src="/assets/admin.js"></script>
+</body>
+</html>
