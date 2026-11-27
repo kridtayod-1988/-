@@ -8,18 +8,28 @@ const DEFAULT_SETTINGS = {
     tracking_url: "https://track.thailandpost.com/?track={tracking}",
   },
   email: { notify_paid: true, notify_shipped: true },
-  line: { group_enabled: false, individual_enabled: false, group_ids: [], channel_access_token: "", channel_secret: "" },
+  line: {
+    group_enabled: false,
+    individual_enabled: false,
+    groups: [],                       // [{ id, label, role: 'all'|'orders'|'finance' }]
+    channel_access_token: "",
+    channel_secret: "",
+  },
 };
 
 export async function getSettings(env) {
   const row = await env.DB.prepare(`SELECT value FROM settings WHERE key = 'shop'`).first();
-  if (!row) return structuredClone(DEFAULT_SETTINGS);
-  try {
-    const saved = JSON.parse(row.value);
-    return { ...structuredClone(DEFAULT_SETTINGS), ...saved };
-  } catch {
-    return structuredClone(DEFAULT_SETTINGS);
+  let saved = {};
+  if (row) {
+    try { saved = JSON.parse(row.value); } catch { saved = {}; }
   }
+  const merged = { ...structuredClone(DEFAULT_SETTINGS), ...saved };
+  // ย้าย group_ids รูปแบบเก่า → groups (ครั้งแรกหลังอัปเดต)
+  if (!Array.isArray(merged.line.groups) && Array.isArray(merged.line.group_ids)) {
+    merged.line.groups = merged.line.group_ids.map((id) => ({ id: String(id), label: "", role: "all" }));
+  }
+  if (!Array.isArray(merged.line.groups)) merged.line.groups = [];
+  return merged;
 }
 
 export async function saveSettings(env, next) {
@@ -43,7 +53,7 @@ export function publicSettings(s) {
     line: {
       group_enabled: Boolean(s.line.group_enabled),
       individual_enabled: Boolean(s.line.individual_enabled),
-      group_ids: Array.isArray(s.line.group_ids) ? s.line.group_ids : [],
+      groups: Array.isArray(s.line.groups) ? s.line.groups : [],
       has_token: Boolean(s.line.channel_access_token),
       has_secret: Boolean(s.line.channel_secret),
     },

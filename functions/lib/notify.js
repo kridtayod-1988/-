@@ -1,4 +1,4 @@
-// ระบบแจ้งเตือน: อีเมล (Resend) + LINE OA (กลุ่ม / รายบุคคล)
+// ระบบแจ้งเตือน: อีเมล (Resend) + LINE OA (กลุ่มแอดมินหลายกลุ่มแบบแยกบทบาท / รายบุคคล)
 import { orderView } from "./orders.js";
 import { getSettings } from "./settings.js";
 
@@ -42,6 +42,13 @@ export async function pushLineText(env, to, text) {
   }
 }
 
+// เลือกกลุ่มตามบทบาท — role: 'orders' (ออเดอร์) | 'finance' (การเงิน)
+// กลุ่มที่ตั้ง role = 'all' จะได้รับทุกประเภท
+function groupTargets(settings, role) {
+  const groups = Array.isArray(settings.line?.groups) ? settings.line.groups : [];
+  return groups.filter((g) => g?.id && (g.role === role || g.role === "all")).map((g) => g.id);
+}
+
 function orderText(view) {
   const lines = view.items.map((i) => `• ${i.name} × ${i.qty} = ${thbFmt(i.price * i.qty)}`);
   const totals = [`ยอดสินค้า: ${thbFmt(view.subtotal_thb)}`];
@@ -51,16 +58,16 @@ function orderText(view) {
   return `เลขที่ ${view.number}\n${lines.join("\n")}\n${totals.join("\n")}`;
 }
 
-async function notifyLine(env, order, view, textForCustomer, textForGroup) {
+async function notifyLine(env, order, customerText, groupText, role = "orders") {
   const settings = await getSettings(env);
-  if (settings.line?.group_enabled && Array.isArray(settings.line?.group_ids)) {
-    for (const gid of settings.line.group_ids) {
-      if (gid) await pushLineText(env, gid.trim(), textForGroup);
+  if (settings.line?.group_enabled) {
+    for (const gid of groupTargets(settings, role)) {
+      await pushLineText(env, gid, groupText);
     }
   }
   if (settings.line?.individual_enabled) {
     const lu = await env.DB.prepare(`SELECT line_user_id FROM line_users WHERE lower(bound_email) = lower(?1)`).bind(order.email).first();
-    if (lu) await pushLineText(env, lu.line_user_id, textForCustomer);
+    if (lu) await pushLineText(env, lu.line_user_id, customerText);
   }
 }
 
@@ -90,7 +97,7 @@ export async function notifyOrderPaid(env, orderId) {
   }
 
   const text = `✅ ออเดอร์ชำระเงินแล้ว\n${orderText(view)}\nลูกค้า: ${view.name}${view.phone ? ` (${view.phone})` : ""}`;
-  await notifyLine(env, order, view, `ขอบคุณที่ชำระเงินค่ะ 🙏\n${orderText(view)}`, text);
+  await notifyLine(env, order, `ขอบคุณที่ชำระเงินค่ะ 🙏\n${orderText(view)}`, text, "orders");
 }
 
 export async function notifyOrderShipped(env, orderId) {
@@ -114,5 +121,17 @@ export async function notifyOrderShipped(env, orderId) {
 
   const customerText = `พัสดุของคุณจัดส่งแล้วค่ะ 📦\nคำสั่งซื้อ ${view.number}\nขนส่ง: ${provider || "-"} · เลขพัสดุ: ${order.tracking_number}${trackingUrl ? `\nติดตาม: ${trackingUrl}` : ""}`;
   const groupText = `📦 จัดส่งแล้ว ${view.number}\nขนส่ง: ${provider || "-"} · เลขพัสดุ: ${order.tracking_number}${trackingUrl ? `\nติดตาม: ${trackingUrl}` : ""}`;
-  await notifyLine(env, order, view, customerText, groupText);
+  await notifyLine(env, order, customerText, groupText, "orders");
+}
+
+// สรุปการเงิน/ข้อความทั่วไป → ส่งเข้ากลุ่มบทบาท 'finance' + 'all'
+export async function notifyFinance(env, text) {
+  const settings = await getSettings(env);
+  if (!settings.line?.channel_access_token) return 0;
+  const targets = [...new Set(groupTargets(settings, "finance"))];
+  let sent = 0;
+  for (const t of targets) {
+    if (await pushLineText(env, t, text)) sent++;
+  }
+  return sent;
 }

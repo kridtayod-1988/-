@@ -19,7 +19,6 @@ CREATE TABLE IF NOT EXISTS products (
 );
 CREATE INDEX IF NOT EXISTS idx_products_active ON products (active, deleted);
 
--- ── คูปองส่วนลด ──
 CREATE TABLE IF NOT EXISTS coupons (
   id               TEXT PRIMARY KEY,
   code             TEXT NOT NULL UNIQUE,
@@ -99,32 +98,62 @@ CREATE TABLE IF NOT EXISTS stock_movements (
 );
 CREATE INDEX IF NOT EXISTS idx_stock_movements_product ON stock_movements (product_id);
 
--- ── ตั้งค่าร้าน (ธีมสี / ขนส่ง / อีเมล / LINE OA) เก็บเป็น JSON ──
 CREATE TABLE IF NOT EXISTS settings (
   key        TEXT PRIMARY KEY,
   value      TEXT NOT NULL,
   updated_at INTEGER NOT NULL
 );
 
--- ── สมุดรายรับ-รายจ่าย (สำหรับสรุปยอดและยื่นภาษี) ──
 CREATE TABLE IF NOT EXISTS transactions (
   id          TEXT PRIMARY KEY,
   kind        TEXT NOT NULL CHECK (kind IN ('income','expense')),
   category    TEXT NOT NULL DEFAULT '',
   amount_thb  INTEGER NOT NULL CHECK (amount_thb >= 0),
   note        TEXT NOT NULL DEFAULT '',
-  occurred_on TEXT NOT NULL,              -- วันที่ (YYYY-MM-DD, เวลาไทย)
-  order_id    TEXT,                       -- ถ้ามาจากออเดอร์ = ลบไม่ได้
+  occurred_on TEXT NOT NULL,
+  order_id    TEXT,
   created_at  INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions (occurred_on DESC);
 CREATE INDEX IF NOT EXISTS idx_transactions_order ON transactions (order_id);
 
--- ── ผู้ใช้ LINE ที่ผูกคำสั่งซื้อไว้ (สำหรับแจ้งเตือนรายบุคคล) ──
 CREATE TABLE IF NOT EXISTS line_users (
   line_user_id TEXT PRIMARY KEY,
   display_name TEXT NOT NULL DEFAULT '',
   bound_email  TEXT,
   created_at   INTEGER NOT NULL,
   updated_at   INTEGER NOT NULL
+);
+
+-- ── ความปลอดภัย: จำกัดอัตราการเรียก (rate limiting) ──
+CREATE TABLE IF NOT EXISTS rate_limits (
+  key          TEXT PRIMARY KEY,      -- เช่น login:1.2.3.4
+  count        INTEGER NOT NULL DEFAULT 0,
+  window_start INTEGER NOT NULL
+);
+
+-- ── ความปลอดภัย: บันทึกการดำเนินการทุกขั้นตอน (audit trail) ──
+CREATE TABLE IF NOT EXISTS audit_log (
+  id         TEXT PRIMARY KEY,
+  action     TEXT NOT NULL,           -- login_success, product_create, ...
+  detail     TEXT NOT NULL DEFAULT '',
+  ip         TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log (created_at DESC);
+
+-- ── จัดเก็บรายงานยอดขาย/การเงิน (snapshot ตามงวด ใช้ประกอบภาษี) ──
+CREATE TABLE IF NOT EXISTS sales_reports (
+  id           TEXT PRIMARY KEY,
+  period_type  TEXT NOT NULL CHECK (period_type IN ('daily','monthly','quarterly','yearly')),
+  period       TEXT NOT NULL,         -- YYYY / YYYY-MM / YYYY-Qn / YYYY-MM-DD
+  income_thb   INTEGER NOT NULL DEFAULT 0,
+  expense_thb  INTEGER NOT NULL DEFAULT 0,
+  profit_thb   INTEGER NOT NULL DEFAULT 0,
+  orders_count INTEGER NOT NULL DEFAULT 0,
+  items_count  INTEGER NOT NULL DEFAULT 0,
+  snapshot_json TEXT NOT NULL,
+  created_by   TEXT NOT NULL DEFAULT 'auto',
+  created_at   INTEGER NOT NULL,
+  UNIQUE(period_type, period)
 );

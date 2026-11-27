@@ -22,6 +22,28 @@ export function randomToken(bytes = 24) {
   return btoa(String.fromCharCode(...b)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
+// IP จริงของผู้เรียก (Cloudflare ส่งมาให้)
+export function clientIp(request) {
+  const ip = request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || "";
+  return ip.split(",")[0].trim().slice(0, 60);
+}
+
+// จำกัดอัตราการเรียกต่อ key (best-effort — แนะนำเสริม WAF Rate Limiting ของ Cloudflare)
+export async function rateLimit(env, key, max, windowMs) {
+  const ts = Date.now();
+  const row = await env.DB.prepare(`SELECT count, window_start FROM rate_limits WHERE key = ?1`).bind(key).first();
+  if (!row || ts - row.window_start >= windowMs) {
+    await env.DB.prepare(
+      `INSERT INTO rate_limits (key, count, window_start) VALUES (?1, 1, ?2)
+       ON CONFLICT(key) DO UPDATE SET count = 1, window_start = ?2`
+    ).bind(key, ts).run();
+    return { ok: true };
+  }
+  if (row.count >= max) return { ok: false, retrySec: Math.max(1, Math.ceil((row.window_start + windowMs - ts) / 1000)) };
+  await env.DB.prepare(`UPDATE rate_limits SET count = count + 1 WHERE key = ?1`).bind(key).run();
+  return { ok: true };
+}
+
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 async function sessionSecret(env) {
   return env.SESSION_SECRET || (await sha256Hex("admin-session::" + env.ADMIN_PASSWORD));
