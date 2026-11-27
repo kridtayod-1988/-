@@ -228,7 +228,7 @@ function orderCardHtml(o) {
   </article>`;
 }
 
-/* ════════ การเงิน: สมุด + บันทึกยอดขาย + ไตรมาส + จัดเก็บรายงาน ════════ */
+/* ════════ การเงิน ════════ */
 async function renderFinance() {
   const year = state.financeYear;
   const [data, tx, daily, products, quarterlyData, reports] = await Promise.all([
@@ -352,11 +352,10 @@ async function renderFinance() {
     </div>
 
     <div class="card pad report-section">
-      <h2>📈 บันทึกยอดขายรายวัน — ${esc(monthLabel(state.financeMonth))}</h2>
-      <label class="field" style=? no inline — class only><span></span></label>
+      <h2>📈 บันทึกยอดขายรายวัน</h2>
       <div class="toolbar-row">
         <select id="sales-month" class="select">${months.map((m) => `<option value="${m}"${m === state.financeMonth ? " selected" : ""}>${monthLabel(m)}</option>`).join("")}</select>
-        <span class="muted sm">ออเดอร์ชำระเงินรายวัน (จากสมุดรายรับ)</span>
+        <span class="muted sm">ออเดอร์ที่ชำระเงินรายวัน (จากสมุดรายรับ)</span>
       </div>
       <div class="table-wrap">
         <table class="admin-table">
@@ -406,7 +405,7 @@ async function renderFinance() {
 
   $("#finance-year").addEventListener("change", (e) => {
     state.financeYear = e.target.value;
-    state.financeMonth = `${e.target.value}-01`.slice(0, 7);
+    state.financeMonth = `${e.target.value}-01`;
     loadTab("finance");
   });
   $("#sales-month").addEventListener("change", (e) => {
