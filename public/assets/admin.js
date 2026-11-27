@@ -1,4 +1,4 @@
-// แผงผู้ดูแล — ภาพรวม / สินค้า / คูปอง / คำสั่งซื้อ / การเงิน / ตั้งค่า
+// แผงผู้ดูแล — ภาพรวม / สินค้า / คูปอง / คำสั่งซื้อ / การเงิน / ตั้งค่า (+audit)
 import { api, esc, thb, fmtDate, imgOr, toast } from "./core.js";
 
 const $ = (sel, el = document) => el.querySelector(sel);
@@ -7,21 +7,30 @@ const dialog = document.getElementById("product-dialog");
 const couponDialog = document.getElementById("coupon-dialog");
 const state = {
   tab: "dash", editingId: null, couponEditingId: null,
-  products: [], coupons: [], orders: [], transactions: [], lineUsers: [],
+  products: [], coupons: [], orders: [], transactions: [], lineUsers: [], lineGroups: [],
   orderFilter: "", financeYear: String(new Date().getFullYear()),
-  settings: null, flags: {}, financeData: null,
+  financeMonth: new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" }).slice(0, 7),
+  settings: null, flags: {}, financeData: null, audit: [],
 };
+const SHOP_NAME = "เปรมปรี ศรีนาราง";
 const ORDER_STATUS = { pending: "รอชำระเงิน", paid: "ชำระแล้ว", shipped: "จัดส่งแล้ว", expired: "หมดเวลา", failed: "ไม่สำเร็จ" };
 const PROVIDERS = ["ไปรษณีย์ไทย", "ไปรษณีย์ไทย (EMS)", "Flash Express", "Kerry Express (KEX)", "J&T Express", "อื่นๆ"];
 const EXPENSE_CATEGORIES = ["ต้นทุนสินค้า", "ค่าจัดส่ง/ขนส่ง", "ค่าโฆษณา/การตลาด", "ค่าธรรมเนียม Stripe", "ค่าใช้จ่ายร้าน", "ภาษี/ค่าธรรมเนียม", "อื่นๆ"];
+const REPORT_TYPE = { daily: "รายวัน", monthly: "รายเดือน", quarterly: "รายไตรมาส", yearly: "รายปี" };
+const QUARTER_RANGE = { 1: "ม.ค.–มี.ค.", 2: "เม.ย.–มิ.ย.", 3: "ก.ค.–ก.ย.", 4: "ต.ค.–ธ.ค." };
 const PRESETS = {
-  cha: { name: "ชาอ่อน", bg: "#f7f1e6", brand: "#9c7248", brandStrong: "#7c5836", accent: "#c8973a" },
-  olive: { name: "เขียวมะกอก", bg: "#f2f2ec", brand: "#6f7d54", brandStrong: "#57633f", accent: "#a3b06f" },
-  rose: { name: "ชมพูพาสเทล", bg: "#faf0ee", brand: "#b56b6b", brandStrong: "#8f4f4f", accent: "#d99a8a" },
-  navy: { name: "น้ำเงินหม่น", bg: "#eef1f5", brand: "#4f6d8c", brandStrong: "#3b5570", accent: "#7f9cbd" },
+  cha:      { name: "ชาอ่อน",       bg: "#f7f1e6", brand: "#9c7248", brandStrong: "#7c5836", accent: "#c8973a" },
+  olive:    { name: "เขียวมะกอก",   bg: "#f2f2ec", brand: "#6f7d54", brandStrong: "#57633f", accent: "#a3b06f" },
+  rose:     { name: "ชมพูพาสเทล",   bg: "#faf0ee", brand: "#b56b6b", brandStrong: "#8f4f4f", accent: "#d99a8a" },
+  navy:     { name: "น้ำเงินหม่น",   bg: "#eef1f5", brand: "#4f6d8c", brandStrong: "#3b5570", accent: "#7f9cbd" },
   lavender: { name: "ม่วงลาวานเดอร์", bg: "#f3f0f7", brand: "#7c6a9c", brandStrong: "#5f4f80", accent: "#a897c9" },
+  terracotta: { name: "ส้มดินเผา",  bg: "#f8f0ea", brand: "#b3573f", brandStrong: "#8c4232", accent: "#d98e6a" },
+  forest:   { name: "เขียวป่าลึก",   bg: "#eef3ee", brand: "#3f6b4f", brandStrong: "#2f523c", accent: "#7fae8e" },
+  sand:     { name: "ทรายทอง",      bg: "#f9f4e8", brand: "#b08d3e", brandStrong: "#8a6d2e", accent: "#d4b96a" },
+  slate:    { name: "เทาหินลื่น",    bg: "#f1f2f4", brand: "#5b6470", brandStrong: "#454d57", accent: "#93a1b0" },
+  wine:     { name: "ไวน์แดง",      bg: "#f7eef0", brand: "#8c3b52", brandStrong: "#6e2c3f", accent: "#c07a8f" },
+  teal:     { name: "เขียวน้ำทะเล",  bg: "#edf4f4", brand: "#3e7373", brandStrong: "#2e5858", accent: "#6fa3a3" },
 };
-const SHOP_NAME = "เปรมปรี ศรีนาราง";
 
 (async function boot() {
   try {
@@ -75,7 +84,7 @@ async function loadTab(tab) {
   }
 }
 
-/* ════════ แท็บภาพรวม ════════ */
+/* ════════ ภาพรวม ════════ */
 async function renderDash() {
   const { stats: s } = await api("/admin-api/stats");
   main.innerHTML = `
@@ -90,7 +99,7 @@ async function renderDash() {
     </div>`;
 }
 
-/* ════════ แท็บสินค้า ════════ */
+/* ════════ สินค้า ════════ */
 async function renderProducts() {
   const data = await api("/admin-api/products");
   state.products = data.products;
@@ -129,7 +138,7 @@ function productRowHtml(p) {
   </tr>`;
 }
 
-/* ════════ แท็บคูปอง ════════ */
+/* ════════ คูปอง ════════ */
 async function renderCoupons() {
   const data = await api("/admin-api/coupons");
   state.coupons = data.coupons;
@@ -144,20 +153,19 @@ async function renderCoupons() {
         <tbody>${state.coupons.map(couponRowHtml).join("") || `<tr><td colspan="7" class="muted center">ยังไม่มีคูปอง</td></tr>`}</tbody>
       </table>
     </div>
-    <p class="muted sm">ลูกค้าใส่โค้ดได้ที่หน้าชำระเงิน — ส่วนลดจะแสดงบนหน้าชำระเงินของ Stripe และบันทึกลงยอดออเดอร์อัตโนมัติ</p>`;
+    <p class="muted sm">ลูกค้าใส่โค้ดได้ที่หน้าชำระเงิน — ส่วนลดแสดงบนหน้าชำระเงิน Stripe และบันทึกลงยอดออเดอร์อัตโนมัติ</p>`;
   $("#add-coupon").addEventListener("click", () => openCouponDialog(null));
 }
 
 function couponRowHtml(c) {
   const label = c.kind === "percent" ? `${c.value}%${c.max_discount_thb ? ` (สูงสุด ฿${c.max_discount_thb.toLocaleString("th-TH")})` : ""}` : `฿${c.value.toLocaleString("th-TH")}`;
   const range = `${c.starts_at ? fmtDate(c.starts_at) : "เริ่มทันที"} → ${c.ends_at ? fmtDate(c.ends_at) : "ไม่จำกัด"}`;
-  const used = `${c.used_count}${c.usage_limit ? "/" + c.usage_limit : ""} ครั้ง`;
   return `
   <tr>
     <td><strong>${esc(c.code)}</strong></td>
     <td>${esc(label)}</td>
     <td>${c.min_subtotal_thb ? thb(c.min_subtotal_thb) : "-"}</td>
-    <td>${esc(used)}</td>
+    <td>${c.used_count}${c.usage_limit ? "/" + c.usage_limit : ""} ครั้ง</td>
     <td class="muted sm">${esc(range)}</td>
     <td><span class="status ${c.active ? "paid" : "expired"}">${c.active ? "เปิดใช้" : "ปิดใช้"}</span></td>
     <td class="row-actions">
@@ -167,7 +175,7 @@ function couponRowHtml(c) {
   </tr>`;
 }
 
-/* ════════ แท็บคำสั่งซื้อ ════════ */
+/* ════════ คำสั่งซื้อ ════════ */
 async function renderOrders() {
   const qs = state.orderFilter ? `?status=${state.orderFilter}` : "";
   const data = await api(`/admin-api/orders${qs}`);
@@ -220,24 +228,62 @@ function orderCardHtml(o) {
   </article>`;
 }
 
-/* ════════ แท็บการเงิน ════════ */
+/* ════════ การเงิน: สมุด + บันทึกยอดขาย + ไตรมาส + จัดเก็บรายงาน ════════ */
 async function renderFinance() {
   const year = state.financeYear;
-  const [data, tx] = await Promise.all([
+  const [data, tx, daily, products, quarterlyData, reports] = await Promise.all([
     api(`/admin-api/finance/summary?year=${year}`),
     api(`/admin-api/finance/transactions?year=${year}`),
+    api(`/admin-api/finance/sales-daily?month=${state.financeMonth}`),
+    api(`/admin-api/finance/sales-products?year=${year}`),
+    api(`/admin-api/finance/quarterly?year=${year}`),
+    api(`/admin-api/finance/reports`),
   ]);
-  state.financeData = data;
+  state.financeData = { ...data, quarters: quarterlyData.quarters, reports: reports.reports };
   state.transactions = tx.transactions;
+  state.financeYear = data.year;
 
   const todayBkk = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
   const years = [Number(year) - 1, Number(year), Number(year) + 1];
+  const months = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, "0")}`);
+
   const monthRows = data.monthly
     .map((m) => `<tr><td>${esc(monthLabel(m.ym))}</td><td class="num">${thb(m.income)}</td><td class="num">${thb(m.expense)}</td><td class="num">${thb(m.income - m.expense)}</td></tr>`)
     .join("") || `<tr><td colspan="4" class="muted center">ไม่มีข้อมูลในปีนี้</td></tr>`;
   const catRows = data.expenseCategories
     .map((c) => `<tr><td>${esc(c.category)}</td><td class="num">${thb(c.total)}</td></tr>`)
     .join("") || `<tr><td colspan="2" class="muted center">ยังไม่มีรายจ่าย</td></tr>`;
+  const dailyRows = daily.rows
+    .map((d) => `<tr><td class="mono">${esc(d.day)}</td><td class="num">${d.orders}</td><td class="num">${thb(d.revenue)}</td></tr>`)
+    .join("") || `<tr><td colspan="3" class="muted center">ไม่มียอดขายในเดือนนี้</td></tr>`;
+  const productRows = products.rows
+    .map((p, i) => `<tr><td>${i + 1}. ${esc(p.name)}</td><td class="num">${p.qty}</td><td class="num">${thb(p.revenue)}</td></tr>`)
+    .join("") || `<tr><td colspan="3" class="muted center">ยังไม่มียอดขาย</td></tr>`;
+  const quarterRows = quarterlyData.quarters
+    .map((q) => `<tr>
+      <td><strong>ไตรมาส ${q.q}</strong><div class="muted sm">${QUARTER_RANGE[q.q]}</div></td>
+      <td class="num">${thb(q.income)}</td><td class="num">${thb(q.expense)}</td><td class="num">${thb(q.profit)}</td>
+      <td class="num">${q.orders_count}</td>
+      <td class="row-actions">
+        <button class="btn ghost sm" data-action="print-quarter" data-q="${q.q}">🖨 พิมพ์</button>
+        <button class="btn outline sm" data-action="store-quarter" data-q="${q.q}">จัดเก็บ</button>
+      </td>
+    </tr>`)
+    .join("");
+  const reportRows = reports.reports
+    .map((r) => `<tr>
+      <td>${REPORT_TYPE[r.period_type] || r.period_type}</td>
+      <td><strong>${esc(r.period)}</strong></td>
+      <td class="num">${thb(r.income_thb)}</td><td class="num">${thb(r.expense_thb)}</td><td class="num">${thb(r.profit_thb)}</td>
+      <td class="num">${r.orders_count}</td>
+      <td class="muted sm">${fmtDate(r.created_at)}${r.created_by === "auto" ? " · อัตโนมัติ" : ""}</td>
+      <td class="row-actions">
+        <button class="btn ghost sm" data-action="view-report" data-id="${esc(r.id)}">ดู</button>
+        <a class="btn outline sm" href="/admin-api/finance/reports/${esc(r.id)}/export.csv">CSV</a>
+        <button class="btn danger sm" data-action="del-report" data-id="${esc(r.id)}">ลบ</button>
+      </td>
+    </tr>`)
+    .join("") || `<tr><td colspan="8" class="muted center">ยังไม่มีรายงานที่จัดเก็บ</td></tr>`;
 
   const finCard = (title, d) => `
     <div class="fin-card">
@@ -249,7 +295,7 @@ async function renderFinance() {
 
   main.innerHTML = `
     <div class="toolbar-row">
-      <h1>การเงิน — รายรับรายจ่าย</h1>
+      <h1>การเงิน — รายรับรายจ่าย และรายงาน</h1>
       <span>
         <select id="finance-year" class="select">${years.map((y) => `<option value="${y}"${String(y) === year ? " selected" : ""}>ปี ${y} (พ.ศ. ${y + 543})</option>`).join("")}</select>
         <a class="btn outline sm" href="/admin-api/finance/export.csv?year=${year}">ส่งออก CSV</a>
@@ -299,40 +345,96 @@ async function renderFinance() {
         <div class="card pad">
           <h2>รายการล่าสุด</h2>
           <div class="tx-list">
-            ${state.transactions.slice(0, 30).map(txItemHtml).join("") || `<p class="muted sm">ยังไม่มีรายการ</p>`}
+            ${state.transactions.slice(0, 20).map(txItemHtml).join("") || `<p class="muted sm">ยังไม่มีรายการ</p>`}
           </div>
         </div>
+      </div>
+    </div>
+
+    <div class="card pad report-section">
+      <h2>📈 บันทึกยอดขายรายวัน — ${esc(monthLabel(state.financeMonth))}</h2>
+      <label class="field" style=? no inline — class only><span></span></label>
+      <div class="toolbar-row">
+        <select id="sales-month" class="select">${months.map((m) => `<option value="${m}"${m === state.financeMonth ? " selected" : ""}>${monthLabel(m)}</option>`).join("")}</select>
+        <span class="muted sm">ออเดอร์ชำระเงินรายวัน (จากสมุดรายรับ)</span>
+      </div>
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead><tr><th>วันที่</th><th class="num">ออเดอร์</th><th class="num">รายรับ</th></tr></thead>
+          <tbody>${dailyRows}</tbody>
+        </table>
+      </div>
+      <h2>🏆 สินค้าขายดี (ปี ${year})</h2>
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead><tr><th>สินค้า</th><th class="num">จำนวนชิ้น</th><th class="num">รายรับ</th></tr></thead>
+          <tbody>${productRows}</tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card pad report-section">
+      <h2>🧾 รายงานภาษีรายไตรมาส (ปี ${year})</h2>
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead><tr><th>งวด</th><th class="num">รายรับ</th><th class="num">รายจ่าย</th><th class="num">กำไร</th><th class="num">ออเดอร์</th><th></th></tr></thead>
+          <tbody>${quarterRows}</tbody>
+        </table>
+      </div>
+      <p class="muted sm">ใช้ประกอบการยื่นแบบรายงวด เช่น ภ.ง.ด.30 (VAT) หรือเตรียมข้อมูล ภ.ง.ด.94/90 — ตัวเลขและค่าใช้จ่ายที่หักได้จริงควรให้ผู้ทำบัญชีตรวจก่อนยื่น</p>
+    </div>
+
+    <div class="card pad report-section">
+      <h2>🗄 รายงานที่จัดเก็บไว้ (snapshot ตามงวด)</h2>
+      <div class="report-actions">
+        <select id="report-type" class="select">
+          <option value="monthly">รายเดือน (เดือนนี้)</option>
+          <option value="quarterly">รายไตรมาส (ไตรมาสนี้)</option>
+          <option value="yearly">รายปี (ปีนี้)</option>
+        </select>
+        <button class="btn primary sm" id="store-report">จัดเก็บรายงานตอนนี้</button>
+        <button class="btn outline sm" id="notify-today">ส่งสรุปวันนี้เข้า LINE</button>
+        <span class="muted sm">ระบบจัดเก็บงวดที่จบไปแล้วให้อัตโนมัติทุกครั้งที่เปิดหน้านี้</span>
+      </div>
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead><tr><th>ประเภท</th><th>งวด</th><th class="num">รายรับ</th><th class="num">รายจ่าย</th><th class="num">กำไร</th><th class="num">ออเดอร์</th><th>จัดเก็บเมื่อ</th><th></th></tr></thead>
+          <tbody>${reportRows}</tbody>
+        </table>
       </div>
     </div>`;
 
   $("#finance-year").addEventListener("change", (e) => {
     state.financeYear = e.target.value;
+    state.financeMonth = `${e.target.value}-01`.slice(0, 7);
+    loadTab("finance");
+  });
+  $("#sales-month").addEventListener("change", (e) => {
+    state.financeMonth = e.target.value;
     loadTab("finance");
   });
   $("#tx-kind").addEventListener("change", (e) => {
     const cat = $("#tx-category");
-    if (e.target.value === "income") {
-      cat.innerHTML = `<option>รายรับอื่นๆ</option>`;
-    } else {
-      cat.innerHTML = EXPENSE_CATEGORIES.map((c) => `<option>${esc(c)}</option>`).join("");
-    }
+    cat.innerHTML = e.target.value === "income" ? `<option>รายรับอื่นๆ</option>` : EXPENSE_CATEGORIES.map((c) => `<option>${esc(c)}</option>`).join("");
   });
   $("#tx-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
     try {
       await api("/admin-api/finance/transactions", {
-        body: {
-          kind: fd.get("kind"),
-          category: fd.get("category"),
-          amount: Number(fd.get("amount")),
-          date: fd.get("date"),
-          note: String(fd.get("note") || "").trim(),
-        },
+        body: { kind: fd.get("kind"), category: fd.get("category"), amount: Number(fd.get("amount")), date: fd.get("date"), note: String(fd.get("note") || "").trim() },
       });
       toast("บันทึกรายการแล้ว");
       loadTab("finance");
     } catch (err) { toast(err.message, true); }
+  });
+  $("#store-report").addEventListener("click", async () => {
+    try { await api("/admin-api/finance/reports", { body: { period_type: $("#report-type").value } }); toast("จัดเก็บรายงานแล้ว"); loadTab("finance"); }
+    catch (err) { toast(err.message, true); }
+  });
+  $("#notify-today").addEventListener("click", async () => {
+    try { const r = await api("/admin-api/finance/notify-today", { body: {} }); toast(`ส่งสรุปวันนี้เข้า LINE แล้ว (${r.sent} กลุ่ม)`); }
+    catch (err) { toast(err.message, true); }
   });
 }
 
@@ -354,12 +456,56 @@ function monthLabel(ym) {
   } catch { return ym; }
 }
 
-/* ════════ แท็บตั้งค่า ════════ */
+function quarterYmList(year, q) {
+  const start = (q - 1) * 3 + 1;
+  return [0, 1, 2].map((i) => `${year}-${String(start + i).padStart(2, "0")}`);
+}
+
+function showReportDialog(r) {
+  const snap = r.snapshot || {};
+  const parts = [];
+  if (Array.isArray(snap.monthly) && snap.monthly.length) {
+    parts.push(`<h3>สรุปรายเดือน</h3><table class="admin-table"><thead><tr><th>เดือน</th><th class="num">รายรับ</th><th class="num">รายจ่าย</th><th class="num">กำไร</th></tr></thead><tbody>${snap.monthly.map((m) => `<tr><td>${esc(monthLabel(m.ym))}</td><td class="num">${thb(m.income)}</td><td class="num">${thb(m.expense)}</td><td class="num">${thb(m.income - m.expense)}</td></tr>`).join("")}</tbody></table>`);
+  }
+  if (Array.isArray(snap.daily) && snap.daily.length) {
+    parts.push(`<h3>บันทึกยอดขายรายวัน</h3><table class="admin-table"><thead><tr><th>วันที่</th><th class="num">ออเดอร์</th><th class="num">รายรับ</th></tr></thead><tbody>${snap.daily.map((d) => `<tr><td class="mono">${esc(d.day)}</td><td class="num">${d.orders}</td><td class="num">${thb(d.revenue)}</td></tr>`).join("")}</tbody></table>`);
+  }
+  if (Array.isArray(snap.categories) && snap.categories.length) {
+    parts.push(`<h3>รายจ่ายตามหมวด</h3><table class="admin-table"><tbody>${snap.categories.map((c) => `<tr><td>${esc(c.category)}</td><td class="num">${thb(c.total)}</td></tr>`).join("")}</tbody></table>`);
+  }
+  if (Array.isArray(snap.topProducts) && snap.topProducts.length) {
+    parts.push(`<h3>สินค้าขายดี</h3><table class="admin-table"><tbody>${snap.topProducts.map((p) => `<tr><td>${esc(p.name)}</td><td class="num">${p.qty} ชิ้น</td><td class="num">${thb(p.revenue)}</td></tr>`).join("")}</tbody></table>`);
+  }
+  const d = document.createElement("dialog");
+  d.className = "product-dialog";
+  d.innerHTML = `
+    <h2>${REPORT_TYPE[r.period_type] || r.period_type} · ${esc(r.period)}</h2>
+    <dl class="totals">
+      <div><dt>รายรับ</dt><dd>${thb(r.income_thb)}</dd></div>
+      <div><dt>รายจ่าย</dt><dd>${thb(r.expense_thb)}</dd></div>
+      <div><dt>ออเดอร์/ชิ้น</dt><dd>${r.orders_count} / ${r.items_count}</dd></div>
+      <div class="grand"><dt>กำไรสุทธิ</dt><dd>${thb(r.profit_thb)}</dd></div>
+    </dl>
+    ${parts.join("")}
+    <div class="dialog-actions"><button class="btn ghost" id="rd-close">ปิด</button></div>`;
+  document.body.appendChild(d);
+  d.showModal();
+  d.querySelector("#rd-close").addEventListener("click", () => { d.close(); d.remove(); });
+  d.addEventListener("click", (e) => { if (e.target === d) { d.close(); d.remove(); } });
+}
+
+/* ════════ ตั้งค่า ════════ */
 async function renderSettings() {
-  const [data, lineData] = await Promise.all([api("/admin-api/settings"), api("/admin-api/line-users")]);
+  const [data, lineData, auditData] = await Promise.all([
+    api("/admin-api/settings"),
+    api("/admin-api/line-users"),
+    api("/admin-api/audit"),
+  ]);
   state.settings = data.settings;
   state.flags = data.flags;
   state.lineUsers = lineData.users;
+  state.lineGroups = [...(data.settings.line.groups || [])];
+  state.audit = auditData.audit;
   const s = state.settings;
 
   main.innerHTML = `
@@ -367,7 +513,7 @@ async function renderSettings() {
     <div class="settings-grid">
       <div class="card pad settings-card">
         <h2>🎨 โทนสีร้าน</h2>
-        <p class="muted sm">เลือกพรีเซ็ต หรือเลือกสีหลักเอง — หน้าร้านจะเปลี่ยนสีอัตโนมัติ</p>
+        <p class="muted sm">เลือกพรีเซ็ต (${Object.keys(PRESETS).length} โทน) หรือเลือกสีหลักเอง — หน้าร้านเปลี่ยนสีอัตโนมัติ</p>
         <div class="preset-row" id="preset-row"></div>
         <div class="color-row">
           <label class="field"><span>สีหลักแบบกำหนดเอง</span><input type="color" id="custom-brand" value="${esc(s.theme.brand)}"></label>
@@ -390,29 +536,43 @@ async function renderSettings() {
       <div class="card pad settings-card">
         <h2>📧 อีเมลแจ้งออเดอร์ (Resend)</h2>
         <p class="muted sm">สถานะ: ${state.flags.resend ? "✓ ตั้งค่า RESEND_API_KEY แล้ว" : "ยังไม่ได้ตั้ง RESEND_API_KEY — ระบบจะข้ามการส่งอีเมล"}<br>ผู้ส่ง: ${esc(state.flags.email_from || "-")}</p>
-        <label class="check"><input type="checkbox" id="email-paid" ${s.email.notify_paid ? "checked" : ""}> ส่งอีเมลเมื่อลูกค้าชำระเงินสำเร็จ (พร้อมลิงก์ดาวน์โหลดสินค้าดิจิทัล)</label>
+        <label class="check"><input type="checkbox" id="email-paid" ${s.email.notify_paid ? "checked" : ""}> ส่งอีเมลเมื่อลูกค้าชำระเงินสำเร็จ</label>
         <label class="check"><input type="checkbox" id="email-shipped" ${s.email.notify_shipped ? "checked" : ""}> ส่งอีเมลเมื่อจัดส่งแล้ว (พร้อมเลขพัสดุ)</label>
         <button class="btn primary" id="save-email">บันทึกการอีเมล</button>
       </div>
 
       <div class="card pad settings-card">
-        <h2>💬 LINE OA (แจ้งเตือนกลุ่ม / รายบุคคล)</h2>
-        <label class="check"><input type="checkbox" id="line-group" ${s.line.group_enabled ? "checked" : ""}> แจ้งออเดอร์ใหม่/จัดส่งแล้ว เข้ากลุ่ม LINE</label>
-        <label class="field"><span>Group ID (หนึ่งบรรทัดต่อกลุ่ม — ชวนบอทเข้ากลุ่มแล้วระบบบันทึกให้เอง)</span>
-          <textarea id="line-group-ids" rows="3" placeholder="Cxxxx...">${esc((s.line.group_ids || []).join("\n"))}</textarea>
-        </label>
-        <label class="check"><input type="checkbox" id="line-individual" ${s.line.individual_enabled ? "checked" : ""}> แจ้งรายบุคคล (ลูกค้าพิมพ์เลขคำสั่งซื้อทาง OA เพื่อผูก)</label>
+        <h2>💬 LINE OA — แจ้งเตือนหลายกลุ่ม / รายบุคคล</h2>
+        <label class="check"><input type="checkbox" id="line-group" ${s.line.group_enabled ? "checked" : ""}> เปิดแจ้งเตือนเข้ากลุ่ม (ตามบทบาทที่ตั้งด้านล่าง)</label>
+        <div id="line-groups"></div>
         <div class="field-row">
-          <label class="field"><span>Channel Access Token ${s.line.has_token ? "(ตั้งค่าแล้ว — ใส่ใหม่เพื่อเปลี่ยน)" : ""}</span><input type="password" id="line-token" autocomplete="new-password" placeholder="ใส่เฉพาะเมื่อต้องการเปลี่ยน"></label>
-          <label class="field"><span>Channel Secret ${s.line.has_secret ? "(ตั้งค่าแล้ว — ใส่ใหม่เพื่อเปลี่ยน)" : ""}</span><input type="password" id="line-secret" autocomplete="new-password" placeholder="ใส่เฉพาะเมื่อต้องการเปลี่ยน"></label>
+          <label class="field"><span>เพิ่มกลุ่มด้วย Group ID</span><input id="line-new-id" placeholder="Cxxxxxxxxxxxxxxxx"></label>
+          <label class="field"><span>ชื่อเรียก (ภายใน)</span><input id="line-new-label" placeholder="เช่น กลุ่มแอดมินร้าน"></label>
         </div>
-        <p class="muted sm">ผู้ใช้ LINE ที่ผูกแล้ว: ${state.lineUsers.length} คน</p>
+        <button type="button" class="btn ghost sm" id="line-add-group">+ เพิ่มกลุ่ม</button>
+        <label class="check"><input type="checkbox" id="line-individual" ${s.line.individual_enabled ? "checked" : ""}> แจ้งรายบุคคล (ลูกค้าพิมพ์เลขคำสั่งซื้อทาง OA เพื่อผูก — ผูกแล้ว ${state.lineUsers.length} คน)</label>
+        <div class="field-row">
+          <label class="field"><span>Channel Access Token ${s.line.has_token ? "(ตั้งค่าแล้ว)" : ""}</span><input type="password" id="line-token" autocomplete="new-password" placeholder="ใส่เฉพาะเมื่อต้องการเปลี่ยน"></label>
+          <label class="field"><span>Channel Secret ${s.line.has_secret ? "(ตั้งค่าแล้ว)" : ""}</span><input type="password" id="line-secret" autocomplete="new-password" placeholder="ใส่เฉพาะเมื่อต้องการเปลี่ยน"></label>
+        </div>
         <button class="btn primary" id="save-line">บันทึก LINE OA</button>
         <ol class="hint-list">
-          <li>ตั้ง Webhook URL ใน LINE Developers = <code>${esc(state.flags.public_url || "https://<โดเมนร้าน>")}/api/line-webhook</code> แล้วเปิดใช้งาน</li>
-          <li>แอด OA เป็นเพื่อน → ลูกค้าพิมพ์เลขคำสั่งซื้อ (BP-XXXXXXXX) เพื่อรับแจ้งเตือนส่วนตัว</li>
-          <li>ชวนบอทเข้ากลุ่มร้าน → Group ID จะถูกบันทึกอัตโนมัติ</li>
+          <li>ตั้ง Webhook URL = <code>${esc(state.flags.public_url || "https://<โดเมนร้าน>")}/api/line-webhook</code> แล้วเปิดใช้งาน</li>
+          <li>ชวนบอทเข้ากลุ่มร้าน → กลุ่มถูกเพิ่มอัตโนมัติ (บทบาท “ทุกอย่าง”)</li>
+          <li>บทบาท: “ทุกอย่าง” รับทุกแจ้งเตือน · “ออเดอร์เท่านั้น” รับข่าวออเดอร์ · “การเงินเท่านั้น” รับสรุปยอด</li>
+          <li>ลูกค้าพิมพ์เลขคำสั่งซื้อ (BP-XXXXXXXX) ทางแชท OA เพื่อผูกรับแจ้งเตือนส่วนตัว</li>
         </ol>
+      </div>
+
+      <div class="card pad settings-card settings-full">
+        <h2>🛡 บันทึกการดำเนินการ (Audit Log — ล่าสุด 50 รายการ)</h2>
+        <p class="muted sm">เก็บทุกขั้นตอนสำคัญ: เข้าสู่ระบบ (สำเร็จ/ล้มเหลว/ถูกบล็อก), แก้สินค้า/คูปอง/ตั้งค่า, จัดส่ง, การเงิน — เพื่อตรวจสอบย้อนหลังได้</p>
+        <div class="table-wrap">
+          <table class="admin-table">
+            <thead><tr><th>เวลา</th><th>การกระทำ</th><th>รายละเอียด</th><th>IP</th></tr></thead>
+            <tbody>${state.audit.map((a) => `<tr><td class="mono sm">${fmtDate(a.created_at)}</td><td><code class="audit-code">${esc(a.action)}</code></td><td class="muted sm">${esc(a.detail || "-")}</td><td class="mono sm">${esc(a.ip || "-")}</td></tr>`).join("") || `<tr><td colspan="4" class="muted center">ยังไม่มีบันทึก</td></tr>`}</tbody>
+          </table>
+        </div>
       </div>
     </div>`;
 
@@ -420,6 +580,7 @@ async function renderSettings() {
   bindShippingSection();
   bindEmailSection();
   bindLineSection();
+  renderLineGroups();
 }
 
 function shade(hex, f) {
@@ -433,11 +594,7 @@ function bindThemeSection() {
   const row = $("#preset-row");
   const updatePreview = () => {
     const prev = $("#theme-preview");
-    if (prev) {
-      prev.style.background = chosen.bg;
-      prev.style.color = chosen.brandStrong;
-      prev.style.borderColor = chosen.brand;
-    }
+    if (prev) { prev.style.background = chosen.bg; prev.style.color = chosen.brandStrong; prev.style.borderColor = chosen.brand; }
   };
   const renderSwatches = () => {
     row.innerHTML = "";
@@ -498,12 +655,38 @@ function bindEmailSection() {
   });
 }
 
+function renderLineGroups() {
+  const holder = $("#line-groups");
+  if (!holder) return;
+  holder.innerHTML = state.lineGroups.map((g, i) => `
+    <div class="group-row">
+      <input class="g-label" data-i="${i}" value="${esc(g.label || "")}" placeholder="ชื่อเรียก">
+      <input class="g-id mono" data-i="${i}" value="${esc(g.id)}" readonly>
+      <select class="g-role" data-i="${i}">
+        <option value="all"${g.role === "all" ? " selected" : ""}>ทุกอย่าง</option>
+        <option value="orders"${g.role === "orders" ? " selected" : ""}>ออเดอร์เท่านั้น</option>
+        <option value="finance"${g.role === "finance" ? " selected" : ""}>การเงินเท่านั้น</option>
+      </select>
+      <button type="button" class="btn ghost sm" data-action="line-test" data-i="${i}">ทดสอบ</button>
+      <button type="button" class="link-btn" data-action="line-del" data-i="${i}">เอาออก</button>
+    </div>`).join("") || `<p class="muted sm">ยังไม่มีกลุ่ม — ชวนบอทเข้ากลุ่มร้าน (เพิ่มอัตโนมัติ) หรือเพิ่มด้วย Group ID ด้านล่าง</p>`;
+}
+
 function bindLineSection() {
+  $("#line-add-group").addEventListener("click", () => {
+    const id = $("#line-new-id").value.trim();
+    if (!/^(C|U)[0-9a-fA-F]{16,}$/.test(id)) { toast("รูปแบบ ID ไม่ถูกต้อง (เริ่มด้วย C หรือ U ตามด้วยตัวเลขฐานสิบหก)", true); return; }
+    if (state.lineGroups.some((g) => g.id === id)) { toast("มีกลุ่มนี้ในรายการแล้ว", true); return; }
+    state.lineGroups.push({ id, label: $("#line-new-label").value.trim(), role: "all" });
+    $("#line-new-id").value = "";
+    $("#line-new-label").value = "";
+    renderLineGroups();
+  });
   $("#save-line").addEventListener("click", async () => {
     const body = {
       group_enabled: $("#line-group").checked,
       individual_enabled: $("#line-individual").checked,
-      group_ids: $("#line-group-ids").value.split(/[\n,]+/).map((s) => s.trim()).filter(Boolean),
+      groups: state.lineGroups,
     };
     const token = $("#line-token").value.trim();
     const secret = $("#line-secret").value.trim();
@@ -517,7 +700,16 @@ function bindLineSection() {
   });
 }
 
-/* ════════ การกระทำบนหน้า (delegation) ════════ */
+/* ════════ การกระทำ (delegation) ════════ */
+main.addEventListener("input", (e) => {
+  const i = e.target.dataset?.i;
+  if (i === undefined || !state.lineGroups) return;
+  const idx = Number(i);
+  if (!state.lineGroups[idx]) return;
+  if (e.target.classList.contains("g-label")) state.lineGroups[idx].label = e.target.value;
+  if (e.target.classList.contains("g-role")) state.lineGroups[idx].role = e.target.value;
+});
+
 main.addEventListener("click", async (e) => {
   const el = e.target.closest("[data-action]");
   if (!el) return;
@@ -552,7 +744,7 @@ main.addEventListener("click", async (e) => {
     const providerSel = main.querySelector(`[data-provider-input="${el.dataset.id}"]`);
     try {
       await api(`/admin-api/orders/${el.dataset.id}/ship`, { body: { tracking: String(input.value || "").trim(), provider: providerSel?.value || "" } });
-      toast("ยืนยันจัดส่งแล้ว — ระบบส่งอีเมล/LINE แจ้งลูกค้าให้อัตโนมัติ");
+      toast("ยืนยันจัดส่งแล้ว — ระบบส่งอีเมล/LINE แจ้งลูกค้าอัตโนมัติ");
       loadTab("orders");
     } catch (err) { toast(err.message, true); }
   }
@@ -565,12 +757,42 @@ main.addEventListener("click", async (e) => {
     try { await api(`/admin-api/finance/transactions/${el.dataset.id}/delete`, { body: {} }); toast("ลบรายการแล้ว"); loadTab("finance"); }
     catch (err) { toast(err.message, true); }
   }
-  if (act === "print-statement") {
-    printYearlyStatement(state.financeData, state.financeYear);
+  if (act === "print-statement") printYearlyStatement(state.financeData, state.financeYear);
+  if (act === "print-quarter") {
+    const q = Number(el.dataset.q);
+    printQuarterlyStatement(state.financeData, state.financeYear, q);
+  }
+  if (act === "store-quarter") {
+    try {
+      await api("/admin-api/finance/reports", { body: { period_type: "quarterly", period: `${state.financeYear}-Q${el.dataset.q}` } });
+      toast(`จัดเก็บรายงานไตรมาส ${el.dataset.q} แล้ว`);
+      loadTab("finance");
+    } catch (err) { toast(err.message, true); }
+  }
+  if (act === "view-report") {
+    try {
+      const r = await api(`/admin-api/finance/reports/${el.dataset.id}`);
+      showReportDialog(r.report);
+    } catch (err) { toast(err.message, true); }
+  }
+  if (act === "del-report") {
+    if (!confirm("ลบรายงานที่จัดเก็บนี้?")) return;
+    try { await api(`/admin-api/finance/reports/${el.dataset.id}/delete`, { body: {} }); toast("ลบรายงานแล้ว"); loadTab("finance"); }
+    catch (err) { toast(err.message, true); }
+  }
+  if (act === "line-test") {
+    const g = state.lineGroups[Number(el.dataset.i)];
+    if (!g) return;
+    try { await api("/admin-api/line/test", { body: { group_id: g.id } }); toast(`ส่งข้อความทดสอบเข้า “${g.label || g.id}” แล้ว`); }
+    catch (err) { toast(err.message, true); }
+  }
+  if (act === "line-del") {
+    state.lineGroups.splice(Number(el.dataset.i), 1);
+    renderLineGroups();
   }
 });
 
-/* ════════ ฟอร์มสินค้า (dialog) ════════ */
+/* ════════ ฟอร์มสินค้า ════════ */
 const f = document.getElementById("product-form");
 const field = (n) => f.elements.namedItem(n);
 const typeSelect = field("type");
@@ -598,8 +820,7 @@ function openDialog(product) {
     field("description").value = product.description || "";
     field("access_url").value = product.access_url || "";
     field("active").checked = Boolean(product.active);
-    document.getElementById("pf-file-note").textContent = product.file_key
-      ? "สินค้านี้มีไฟล์ดิจิทัลแนบอยู่ — อัปโหลดไฟล์ใหม่เพื่อแทนที่" : "";
+    document.getElementById("pf-file-note").textContent = product.file_key ? "สินค้านี้มีไฟล์ดิจิทัลแนบอยู่ — อัปโหลดไฟล์ใหม่เพื่อแทนที่" : "";
   } else {
     field("active").checked = true;
     document.getElementById("pf-file-note").textContent = "";
@@ -630,7 +851,7 @@ f.addEventListener("submit", async (e) => {
   }
 });
 
-/* ════════ ฟอร์มคูปอง (dialog) ════════ */
+/* ════════ ฟอร์มคูปอง ════════ */
 const cf = document.getElementById("coupon-form");
 const cfield = (n) => cf.elements.namedItem(n);
 const cfKind = cfield("kind");
@@ -694,7 +915,7 @@ cf.addEventListener("submit", async (e) => {
   }
 });
 
-/* ════════ พิมพ์: ใบปะหน้าพัสดุ / ใบสรุปการเงินประจำปี ════════ */
+/* ════════ พิมพ์: ใบปะหน้า / ใบสรุปประจำปี / ใบสรุปไตรมาส ════════ */
 function printLabel(o) {
   document.getElementById("print-area").innerHTML = `
     <div class="parcel-label">
@@ -741,6 +962,29 @@ function printYearlyStatement(data, year) {
         <tbody>${catRows || `<tr><td colspan="2">ไม่มีข้อมูล</td></tr>`}</tbody>
       </table>
       <p class="fine">เอกสารนี้จัดทำจากระบบบันทึกรายรับ-รายจ่ายของร้าน เพื่อใช้ประกอบการพิจารณาและเตรียมแบบแสดงรายการภาษีเงินได้บุคคลธรรมดา (ภ.ง.ด.90 หรือแบบที่เกี่ยวข้อง) — ตัวเลขและค่าใช้จ่ายที่หักได้จริงควรให้ผู้ทำบัญชี/ที่ปรึกษาภาษีตรวจสอบก่อนยื่นต่อกรมสรรพากร</p>
+      <p>จัดทำเมื่อ ${esc(new Date().toLocaleString("th-TH"))}</p>
+      <p>ลงชื่อ ________________________ ผู้จัดทำ &nbsp;&nbsp;&nbsp; ( ${esc(SHOP_NAME)} )</p>
+    </div>`;
+  window.print();
+}
+
+function printQuarterlyStatement(data, year, q) {
+  const be = Number(year) + 543;
+  const qYms = quarterYmList(year, q);
+  const months = (data?.monthly || []).filter((m) => qYms.includes(m.ym));
+  const qRow = (data?.quarters || []).find((x) => x.q === q) || { income: 0, expense: 0, profit: 0, orders_count: 0, items_count: 0 };
+  const monthRows = months.map((m) => `<tr><td>${esc(monthLabel(m.ym))}</td><td class="num">${thb(m.income)}</td><td class="num">${thb(m.expense)}</td><td class="num">${thb(m.income - m.expense)}</td></tr>`).join("") || `<tr><td colspan="4">ไม่มีข้อมูลในไตรมาสนี้</td></tr>`;
+  document.getElementById("print-area").innerHTML = `
+    <div class="statement">
+      <h1>ใบสรุปรายรับ – รายจ่าย รายไตรมาส</h1>
+      <p class="sub">ร้าน${esc(SHOP_NAME)} · ไตรมาส ${q} (${QUARTER_RANGE[q]}) ปี ${esc(year)} (พ.ศ. ${be})</p>
+      <table>
+        <thead><tr><th>เดือน</th><th class="num">รายรับ (บาท)</th><th class="num">รายจ่าย (บาท)</th><th class="num">กำไรสุทธิ (บาท)</th></tr></thead>
+        <tbody>${monthRows}</tbody>
+        <tfoot><tr><td><strong>รวมไตรมาส ${q}</strong></td><td class="num"><strong>${thb(qRow.income)}</strong></td><td class="num"><strong>${thb(qRow.expense)}</strong></td><td class="num"><strong>${thb(qRow.profit)}</strong></td></tr></tfoot>
+      </table>
+      <p>จำนวนออเดอร์ที่ชำระเงิน: <strong>${qRow.orders_count}</strong> รายการ · จำนวนสินค้า <strong>${qRow.items_count}</strong> ชิ้น</p>
+      <p class="fine">เอกสารนี้จัดทำเพื่อประกอบการยื่นแบบภาษีรายงวด เช่น ภ.ง.ด.30 (ภาษีมูลค่าเพิ่ม — กรณีจดทะเบียน) หรือเตรียมข้อมูล ภ.ง.ด.94 (กึ่งปี) / ภ.ง.ด.90 (รายปี) — ควรให้ผู้ทำบัญชี/ที่ปรึกษาภาษีตรวจสอบก่อนยื่นต่อกรมสรรพากร</p>
       <p>จัดทำเมื่อ ${esc(new Date().toLocaleString("th-TH"))}</p>
       <p>ลงชื่อ ________________________ ผู้จัดทำ &nbsp;&nbsp;&nbsp; ( ${esc(SHOP_NAME)} )</p>
     </div>`;
