@@ -276,10 +276,13 @@ textarea { resize: vertical; }
 .tx-item .tx-amt { font-weight: 700; margin-left: auto; }
 .tx-item .pos { color: var(--ok); }
 .tx-item .neg { color: var(--danger); }
+.report-section { margin-top: 20px; }
+.report-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
 
 /* ── ตั้งค่า ── */
 .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
 .settings-card h2 { margin-top: 0; }
+.settings-full { grid-column: 1 / -1; }
 .preset-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 12px; }
 .preset-btn { border: 2px solid; border-radius: 10px; padding: 8px 14px; font: inherit; font-size: .82rem; font-weight: 600; cursor: pointer; }
 .preset-btn.active { box-shadow: 0 0 0 3px rgba(0, 0, 0, .12); }
@@ -289,6 +292,11 @@ textarea { resize: vertical; }
 .hint-list { font-size: .85rem; color: var(--ink-2); padding-left: 18px; margin: 10px 0 0; }
 .hint-list li { margin: 5px 0; }
 .hint-list code { background: var(--surface-2); padding: 2px 6px; border-radius: 6px; font-size: .8rem; }
+.group-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px dashed var(--line); }
+.group-row .g-label { width: 150px; }
+.group-row .g-id { flex: 1; min-width: 180px; font-size: .82rem; }
+.group-row .g-role { width: 150px; }
+.audit-code { background: var(--surface-2); padding: 2px 8px; border-radius: 6px; font-size: .78rem; }
 
 /* ── พิมพ์ (ใบปะหน้าพัสดุ / ใบสรุปการเงิน) ── */
 .print-only { display: none; }
