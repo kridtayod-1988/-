@@ -1,5 +1,6 @@
-// GET /api/coupon?code=X&subtotal=1234 — ตรวจโค้ดส่วนลด (ใช้ในหน้า checkout)
+// GET /api/coupon?code=X&subtotal=1234 — ตรวจโค้ดส่วนลด (จำกัด 30 ครั้ง/10 นาที/ไอพี กันเดาโค้ด)
 import { json, fail } from "../lib/http.js";
+import { rateLimit, clientIp } from "../lib/security.js";
 
 export function calcDiscount(c, subtotal) {
   if (c.kind === "percent") {
@@ -21,6 +22,9 @@ export function couponError(c, subtotal) {
 }
 
 export async function onRequestGet({ request, env }) {
+  const rl = await rateLimit(env, `coupon:${clientIp(request)}`, 30, 600000);
+  if (!rl.ok) return fail("rate_limited", "ตรวจโค้ดหลายครั้งเกินไป กรุณาลองใหม่ภายหลัง", 429);
+
   const url = new URL(request.url);
   const code = (url.searchParams.get("code") || "").trim().toUpperCase();
   const subtotal = Number(url.searchParams.get("subtotal") || 0);

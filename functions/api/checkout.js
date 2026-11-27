@@ -1,7 +1,7 @@
 import { json, fail, readJson, now, isEmail } from "../lib/http.js";
 import { stripeRequest } from "../lib/stripe.js";
 import { orderNumber, releaseOrder } from "../lib/orders.js";
-import { randomToken } from "../lib/security.js";
+import { randomToken, rateLimit, clientIp } from "../lib/security.js";
 import { calcDiscount, couponError } from "./coupon.js";
 
 const MAX_LINES = 20;
@@ -9,6 +9,10 @@ const MAX_QTY_PER_LINE = 10;
 const PHONE_RE = /^0\d{8,9}$/;
 
 export async function onRequestPost({ request, env }) {
+  // กันสแปม/โจมตี: จำกัด 20 ครั้ง/ชั่วโมง/ไอพี (แนะนำเสริม WAF Rate Limiting)
+  const rl = await rateLimit(env, `checkout:${clientIp(request)}`, 20, 3600000);
+  if (!rl.ok) return fail("rate_limited", "มีคำขอชำระเงินหลายครั้งเกินไป กรุณาลองใหม่ภายหลัง", 429);
+
   if (!env.STRIPE_SECRET_KEY) return fail("payment_not_configured", "ระบบชำระเงินยังไม่ได้ตั้งค่า (STRIPE_SECRET_KEY)", 500);
 
   const body = await readJson(request);
@@ -61,7 +65,6 @@ export async function onRequestPost({ request, env }) {
   const FREE_FROM = Math.max(0, Math.round(Number(env.FREE_SHIPPING_FROM_THB ?? 800)));
   const shipping = hasPhysical && subtotal < FREE_FROM ? FEE : 0;
 
-  // ── ตรวจคูปองส่วนลด ──
   let discount = 0;
   let coupon = null;
   const couponCode = String(body.coupon_code || "").trim().toUpperCase();
@@ -90,7 +93,6 @@ export async function onRequestPost({ request, env }) {
     if (!/^\d{5}$/.test(postcode)) return fail("bad_postcode", "รหัสไปรษณีย์ต้องเป็นตัวเลข 5 หลัก");
   }
 
-  // ── บันทึกออเดอร์ + จองสต๊อกในธุรกรรมเดียว (batch ล้ม = rollback ทั้งก้อน) ──
   const orderId = crypto.randomUUID();
   const number = orderNumber();
   const cancelToken = randomToken(24);
@@ -129,7 +131,6 @@ export async function onRequestPost({ request, env }) {
     throw e;
   }
 
-  // ── สร้าง Stripe Checkout Session (+ คูปองแบบ amount_off เพื่อให้ยอดตรงเป๊ะ) ──
   const ttl = Math.min(86400, Math.max(1800, Math.round(Number(env.CHECKOUT_TTL_SECONDS ?? 3600))));
   const lineItems = lines.map((l) => ({
     quantity: l.qty,
@@ -173,7 +174,7 @@ export async function onRequestPost({ request, env }) {
       discounts: stripeDiscount,
     });
   } catch (e) {
-    await releaseOrder(env, orderId, "failed"); // คืนสต๊อก + คืนสิทธิ์คูปอง
+    await releaseOrder(env, orderId, "failed");
     return fail("payment_init", `เปิดหน้าชำระเงินไม่สำเร็จ: ${e.message}`, 502);
   }
 

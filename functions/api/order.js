@@ -2,6 +2,7 @@ import { json, fail, readJson, isEmail } from "../lib/http.js";
 import { stripeRequest } from "../lib/stripe.js";
 import { orderView, markOrderPaid, releaseOrder } from "../lib/orders.js";
 import { notifyOrderPaid } from "../lib/notify.js";
+import { rateLimit, clientIp } from "../lib/security.js";
 
 async function findAndSync(env, order) {
   if (order.status === "pending" && order.session_id) {
@@ -29,6 +30,10 @@ export async function onRequestGet({ request, env }) {
 }
 
 export async function onRequestPost({ request, env }) {
+  // กันการเดาเลขคำสั่งซื้อ: จำกัด 10 ครั้ง/10 นาที/ไอพี
+  const rl = await rateLimit(env, `lookup:${clientIp(request)}`, 10, 600000);
+  if (!rl.ok) return fail("rate_limited", "ค้นหาหลายครั้งเกินไป กรุณาลองใหม่ภายหลัง", 429);
+
   const body = await readJson(request);
   const number = String(body?.number || "").trim().toUpperCase();
   const email = String(body?.email || "").trim().toLowerCase();

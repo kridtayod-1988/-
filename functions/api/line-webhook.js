@@ -1,7 +1,7 @@
 // POST /api/line-webhook — LINE Messaging API webhook
 // - follow: ลงทะเบียนผู้ใช้ LINE + แจ้งวิธีผูกคำสั่งซื้อ
 // - message (พิมพ์ BP-XXXXXXXX): ผูก LINE กับคำสั่งซื้อ เพื่อรับแจ้งเตือนรายบุคคล
-// - joined: บอทถูกชวนเข้ากลุ่ม → บันทึก group id อัตโนมัติ
+// - joined: บอทถูกชวนเข้ากลุ่ม → บันทึกกลุ่ม (role: all) อัตโนมัติ
 import { json } from "../lib/http.js";
 import { getSettings, saveSettings } from "../lib/settings.js";
 import { timingSafeEqual } from "../lib/security.js";
@@ -34,12 +34,12 @@ export async function onRequestPost({ request, env }) {
       ).bind(userId, ts).run();
       await pushLineText(env, userId, "สวัสดีค่ะ 🙏 ร้านเปรมปรี ศรีนาราง\nพิมพ์เลขคำสั่งซื้อ (เช่น BP-XXXXXXXX) เพื่อผูกคำสั่งซื้อ แล้วทางร้านจะแจ้งสถานะผ่าน LINE นี้ค่ะ");
     } else if (ev.type === "joined" && ev.source?.groupId) {
-      const ids = Array.isArray(settings.line?.group_ids) ? [...settings.line.group_ids] : [];
-      if (!ids.includes(ev.source.groupId)) {
-        ids.push(ev.source.groupId);
-        await saveSettings(env, { ...settings, line: { ...settings.line, group_ids: ids } });
+      const groups = Array.isArray(settings.line?.groups) ? [...settings.line.groups] : [];
+      if (!groups.some((g) => g.id === ev.source.groupId)) {
+        groups.push({ id: ev.source.groupId, label: "กลุ่ม (เพิ่มอัตโนมัติ)", role: "all" });
+        await saveSettings(env, { ...settings, line: { ...settings.line, groups } });
       }
-      await pushLineText(env, ev.source.groupId, "บอทเข้าร่วมกลุ่มเรียบร้อย ✅ เปิดการแจ้งเตือนกลุ่มได้ที่หน้าตั้งค่า → LINE OA");
+      await pushLineText(env, ev.source.groupId, "บอทเข้าร่วมกลุ่มเรียบร้อย ✅ เปิดการแจ้งเตือนกลุ่มและตั้งบทบาทกลุ่มได้ที่ /admin.html → ตั้งค่า → LINE OA");
     } else if (ev.type === "message" && ev.message?.type === "text" && userId) {
       const m = String(ev.message.text || "").toUpperCase().match(/BP-[0-9A-Z]{8}/);
       if (!m) continue;
